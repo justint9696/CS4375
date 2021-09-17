@@ -39,7 +39,7 @@ char **tokenize(char *line)
 }
 
 char isValidCMD(char *cmd) {
-  char *tokens[9] = { "ls", "wc", "cat", "echo", "pwd", "sleep", "cd", "cd..", NULL };
+  char *tokens[10] = { "ls", "wc", "cat", "echo", "pwd", "sleep", "cd", "cd..", "exit", NULL };
   for (int i = 0 ; tokens[i] != NULL; i++) {
     if (!strcmp(tokens[i], cmd))
       return 1;
@@ -50,23 +50,25 @@ char isValidCMD(char *cmd) {
 void monitorCMD(char **tokens) {
   char *cmd = tokens[0];
   if (!strcmp("cd", cmd)) {
-    chdir(tokens[1]);
+    chdir(tokens[1]); // changes directory to user input.
   } else if (!strcmp("cd..", cmd)) {
-    chdir("..");
+    chdir(".."); // goes up a directory.
+  } else if (!strcmp("exit", cmd)) {
+    exit(1); // terminate parent process.
   } else {
     int rc = fork();
     if (rc < 0) {
-      // fork process failed
+      // fork process failed.
       printf("fork failed.\n");
       exit(1);
     } else if (rc == 0) {
-      // child process
+      // child process.
       if (!strcmp("echo", cmd)) {
 	int n;
 	char **argv = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
 	argv[0] = strdup("/bin/echo");
 	for (n = 1; tokens[n] != NULL; n++)
-	  argv[n] = tokens[n]; // tokens to echo back to user
+	  argv[n] = tokens[n]; // tokens to echo back to user.
 	argv[n] = NULL;
 	execvp(argv[0], argv);
 	for (int i = 0; argv[i] != NULL; i++)
@@ -75,7 +77,7 @@ void monitorCMD(char **tokens) {
       } else if (!strcmp("cat", cmd)) {
 	char *argv[3];
 	argv[0] = strdup("/bin/cat");
-	argv[1] = tokens[1]; // file to display
+	argv[1] = tokens[1]; // file to display.
 	argv[2] = NULL;
 	execvp(argv[0], argv);
       } else if (!strcmp("pwd", cmd)) {
@@ -93,7 +95,7 @@ void monitorCMD(char **tokens) {
 	char **argv = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
 	argv[0] = strdup("wc");
 	for (n = 1; tokens[n] != NULL; n++)
-	  argv[n] = strdup(tokens[n]); // files to word count
+	  argv[n] = strdup(tokens[n]); // files to word count.
 	argv[n] = NULL;
 	execvp(argv[0], argv);
 	for (int i = 0; argv[i] != NULL; i++)
@@ -102,12 +104,12 @@ void monitorCMD(char **tokens) {
       } else if (!strcmp("sleep", cmd)) {
 	char *argv[3];
 	argv[0] = strdup("/bin/sleep");
-	argv[1] = tokens[1]; // sleep time seconds
+	argv[1] = tokens[1]; // sleep time seconds.
 	argv[2] = NULL;
 	execvp(argv[0], argv);
-      }
+      } 
     } else {
-      // parent process
+      // parent process.
       wait(NULL);
     }
   }
