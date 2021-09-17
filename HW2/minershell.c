@@ -20,7 +20,7 @@ char **tokenize(char *line)
   for(i =0; i < strlen(line); i++){
 
     char readChar = line[i];
-
+    
     if (readChar == ' ' || readChar == '\n' || readChar == '\t'){
       token[tokenIndex] = '\0';
       if (tokenIndex != 0){
@@ -38,15 +38,8 @@ char **tokenize(char *line)
   return tokens;
 }
 
-void freeArgs(char **argv) {
-  for (int i = 0 ; argv[i] != NULL; i++) {
-    free(argv[i]);
-  }
-  free(argv);
-}
-
 char isValidCMD(char *cmd) {
-  char *tokens[7] = { "ls", "wc", "cat", "echo", "pwd", "sleep", NULL };
+  char *tokens[9] = { "ls", "wc", "cat", "echo", "pwd", "sleep", "cd", "cd..", NULL };
   for (int i = 0 ; tokens[i] != NULL; i++) {
     if (!strcmp(tokens[i], cmd))
       return 1;
@@ -55,33 +48,68 @@ char isValidCMD(char *cmd) {
 }
 
 void monitorCMD(char **tokens) {
-  int rc = fork();
-  if (rc < 0) {
-    // fork process failed
-    printf("fork failed.\n");
-    exit(0);
-  } else if (rc == 0) {
-    // child process
-    char *cmd = tokens[0];
-    if (!strcmp("echo", cmd)) {
-      int n;
-      char **argv = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
-      argv[0] = strdup("./echo");
-      for (n = 1; tokens[n] != NULL; n++)
-	argv[n] = tokens[n];
-      argv[n] = NULL;
-      execvp(argv[0], argv);
-      freeArgs(argv);
-    } else if (!strcmp("cat", cmd)) {
-      char *argv[3];
-      argv[0] = strdup("./cat");
-      argv[1] = tokens[1];
-      argv[2] = NULL;
-      execvp(argv[0], argv);
-    }
+  char *cmd = tokens[0];
+  if (!strcmp("cd", cmd)) {
+    chdir(tokens[1]);
+  } else if (!strcmp("cd..", cmd)) {
+    chdir("..");
   } else {
-    // parent process
-    wait();
+    int rc = fork();
+    if (rc < 0) {
+      // fork process failed
+      printf("fork failed.\n");
+      exit(1);
+    } else if (rc == 0) {
+      // child process
+      if (!strcmp("echo", cmd)) {
+	int n;
+	char **argv = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
+	argv[0] = strdup("/bin/echo");
+	for (n = 1; tokens[n] != NULL; n++)
+	  argv[n] = tokens[n]; // tokens to echo back to user
+	argv[n] = NULL;
+	execvp(argv[0], argv);
+	for (int i = 0; argv[i] != NULL; i++)
+	  free(argv[i]);
+	free(argv);
+      } else if (!strcmp("cat", cmd)) {
+	char *argv[3];
+	argv[0] = strdup("/bin/cat");
+	argv[1] = tokens[1]; // file to display
+	argv[2] = NULL;
+	execvp(argv[0], argv);
+      } else if (!strcmp("pwd", cmd)) {
+	char *argv[2];
+	argv[0] = strdup("/bin/pwd");
+	argv[1] = NULL;
+	execvp(argv[0], argv);
+      } else if (!strcmp("ls", cmd)) {
+	char *argv[2];
+	argv[0] = strdup("/bin/ls");
+	argv[1] = NULL;
+	execvp(argv[0], argv);
+      } else if (!strcmp("wc", cmd)) {
+	int n;
+	char **argv = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
+	argv[0] = strdup("wc");
+	for (n = 1; tokens[n] != NULL; n++)
+	  argv[n] = strdup(tokens[n]); // files to word count
+	argv[n] = NULL;
+	execvp(argv[0], argv);
+	for (int i = 0; argv[i] != NULL; i++)
+	  free(argv[i]);
+	free(argv);
+      } else if (!strcmp("sleep", cmd)) {
+	char *argv[3];
+	argv[0] = strdup("/bin/sleep");
+	argv[1] = tokens[1]; // sleep time seconds
+	argv[2] = NULL;
+	execvp(argv[0], argv);
+      }
+    } else {
+      // parent process
+      wait(NULL);
+    }
   }
 }
 
