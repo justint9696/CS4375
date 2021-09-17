@@ -38,8 +38,15 @@ char **tokenize(char *line)
   return tokens;
 }
 
+void freeArgs(char **argv) {
+  for (int i = 0 ; argv[i] != NULL; i++) {
+    free(argv[i]);
+  }
+  free(argv);
+}
+
 char isValidCMD(char *cmd) {
-  char *tokens[3] = { "echo", "exit", NULL };
+  char *tokens[7] = { "ls", "wc", "cat", "echo", "pwd", "sleep", NULL };
   for (int i = 0 ; tokens[i] != NULL; i++) {
     if (!strcmp(tokens[i], cmd))
       return 1;
@@ -48,31 +55,32 @@ char isValidCMD(char *cmd) {
 }
 
 void monitorCMD(char **tokens) {
-  char *cmd = tokens[0];
   int rc = fork();
   if (rc < 0) {
+    // fork process failed
     printf("fork failed.\n");
     exit(0);
   } else if (rc == 0) {
+    // child process
+    char *cmd = tokens[0];
     if (!strcmp("echo", cmd)) {
       int n;
       char **argv = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
       argv[0] = strdup("./echo");
       for (n = 1; tokens[n] != NULL; n++)
 	argv[n] = tokens[n];
-      tokens[n] = NULL;
+      argv[n] = NULL;
       execvp(argv[0], argv);
-      for (int i = 0; i < n; i++)
-	free(argv[i]);
-      free(argv);
-    } else if (!strcmp("exit", cmd)) {
-      exit(0);
-    } else {
-      printf("unk\n");
-      for (int i = 0; tokens[i] != NULL; i++)
-	printf("'%s' not a recognized command.\n");
+      freeArgs(argv);
+    } else if (!strcmp("cat", cmd)) {
+      char *argv[3];
+      argv[0] = strdup("./cat");
+      argv[1] = tokens[1];
+      argv[2] = NULL;
+      execvp(argv[0], argv);
     }
   } else {
+    // parent process
     wait();
   }
 }
@@ -91,7 +99,7 @@ int main(int argc, char* argv[]) {
     scanf("%[^\n]", line);
     getchar();
 
-    printf("Command entered: %s (remove this debug output later)\n", line);
+    // printf("Command entered: %s (remove this debug output later)\n", line);
     /* END: TAKING INPUT */
 
     line[strlen(line)] = '\n'; //terminate with new line
@@ -99,12 +107,20 @@ int main(int argc, char* argv[]) {
 
     //do whatever you want with the commands, here we just print them
 
-    for(i=0;tokens[i]!=NULL;i++){
-      printf("found token %s (remove this debug output later)\n", tokens[i]);
-    }
+    // for(i=0;tokens[i]!=NULL;i++){
+    // printf("found token %s (remove this debug output later)\n", tokens[i]);
+    // }
 
-    if (isValidCMD(tokens[0]))
+    if (isValidCMD(tokens[0])) {
       monitorCMD(tokens);
+    } else {
+      for (int i = 0; tokens[i] != NULL; i++) {
+	if (i == 0) printf("'");
+	else printf(" ");
+	printf("%s", tokens[i]);
+      }
+      printf("' is not a recognized command.\n", line);
+    }
 
     // Freeing the allocated memory
     for(i=0;tokens[i]!=NULL;i++){
