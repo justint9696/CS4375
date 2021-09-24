@@ -148,17 +148,21 @@ int main(int argc, char* argv[]) {
       int redirect_fd;
       for (int i = 0; tokens[i] != NULL; i++) {
 	if (!strcmp(tokens[i], ">")) {
+	  update = 1;
 	  file = tokens[i + 1];
-	  creat(file, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-	  redirect_fd = open(file, O_WRONLY | O_TRUNC);
-	  dup2(redirect_fd, STDOUT_FILENO);
-	  dup2(redirect_fd, STDERR_FILENO);
-	  close(redirect_fd);
 	}
 	if (update) {
 	  // remove redirect flags
 	  tokens[i] = NULL;
 	}
+      }
+
+      if (update) {
+	creat(file, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	redirect_fd = open(file, O_WRONLY | O_TRUNC);
+	dup2(redirect_fd, STDOUT_FILENO); // redirect output
+	dup2(redirect_fd, STDERR_FILENO); // redirect error
+	close(redirect_fd);
       }
       
       monitorCMD(tokens);
