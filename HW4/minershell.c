@@ -67,7 +67,7 @@ char isValidCMD(char *cmd) {
   return 0;
 }
 
-void monitorCMD(char **tokens) {
+void executeCMD(char **tokens) {
   // Executes user inputted command; forks if needed.
   char *cmd = tokens[0];
   if (!strcmp("cd", cmd)) {
@@ -136,12 +136,81 @@ void monitorCMD(char **tokens) {
   }
 }
 
+void executeCommand(char **tokens) {
+  int i;
+  char *command = tokens[0];
+  if (!strcmp(command, "cd")) {
+    chdir(tokens[1]);
+  } else if (!strcmp(command, "cd..")) {
+    chdir("..");
+  } else if (!strcmp(command, "exit")) {
+    exit(1);
+  } else {
+    char **argv = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
+    if (!strcmp(command, "ls")) {
+      argv[0] = strdup("/bin/ls"); 
+    } else if (!strcmp(command, "sort")) {
+      argv[0] = strdup("sort");
+    }
+    for (i = 1; tokens[i] != NULL; i++)
+      argv[i] = tokens[i];
+    argv[i] = NULL;
+    execvp(argv[0], argv);
+  }
+}
+
+void executeCommands(char ***commands, int inputfd) {
+  if (commands[1] == NULL) {
+    // we are at the last command
+    int id = fork();
+    if (id < 0) {
+      printf("fork failed\n");
+      exit(1);
+    } else if (id == 0) {
+      // child process
+      if (inputfd != -1) {
+	// accept input from pipe called by last process
+	dup2(inputfd, STDIN_FILENO);
+	close(inputfd);
+      }
+      executeCommand(commands[0]);
+    } else {
+      wait(NULL);
+    }
+  } else {
+    // there is at least 1 more command after this
+    int fd[2];
+    if (pipe(fd) == -1) {
+      printf("pipe failed\n");
+      exit(1);
+    }
+    int id = fork();
+    if (id < 0) {
+      printf("fork failed\n");
+      exit(1);
+    } else if (id == 0) {
+      // child process
+      if (inputfd != -1) {
+	// accept input from pipe called by last process
+	dup2(inputfd, STDIN_FILENO);
+	close(inputfd);
+      }
+      dup2(fd[1], STDOUT_FILENO); // redirect output to pipe
+      close(fd[1]);
+      executeCommand(commands[0]);
+      executeCommands(commands++, fd[0]);
+    } else {
+      wait(NULL);
+    }
+  }
+}
 
 int main(int argc, char* argv[]) {
   char  line[MAX_INPUT_SIZE];
   char  **tokens;
   char ***commands;
   int i;
+  int fd[2];
   
   while(1) {
     /* BEGIN: TAKING INPUT */
@@ -176,6 +245,7 @@ int main(int argc, char* argv[]) {
     }
     */
 
+    /*
     for (int i = 0; commands[i] != NULL; i++) {
       if (isValidCMD(commands[i][0])) {
 	char *file;
@@ -202,12 +272,15 @@ int main(int argc, char* argv[]) {
 	  close(redirect_fd);
 	}
 
-	monitorCMD(commands[i]);
+	executeCMD(commands[i]);
       } else {
 	char error_message[30] = "An error has occurred\n";
 	write(STDERR_FILENO, error_message, strlen(error_message));
       }
     }
+    */
+
+    executeCommands(commands, -1);
 	
     // Freeing the allocated memory
     for(i=0;tokens[i]!=NULL;i++){
