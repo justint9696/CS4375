@@ -66,76 +66,7 @@ char isValidCMD(char *cmd) {
   }
   return 0;
 }
-
-void executeCMD(char **tokens) {
-  // Executes user inputted command; forks if needed.
-  char *cmd = tokens[0];
-  if (!strcmp("cd", cmd)) {
-    chdir(tokens[1]); // changes directory to user input.
-  } else if (!strcmp("cd..", cmd)) {
-    chdir(".."); // goes up a directory.
-  } else if (!strcmp("exit", cmd)) {
-    exit(1); // terminate parent process.
-  } else {
-    int rc = fork();
-    if (rc < 0) {
-      // fork process failed.
-      printf("fork failed.\n");
-      exit(1);
-    } else if (rc == 0) {
-      // child process.
-      if (!strcmp("echo", cmd)) {
-	int n;
-	char **argv = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
-	argv[0] = strdup("/bin/echo");
-	for (n = 1; tokens[n] != NULL; n++)
-	  argv[n] = tokens[n]; // tokens to echo back to user.
-	argv[n] = NULL;
-	execvp(argv[0], argv);
-	for (int i = 0; argv[i] != NULL; i++)
-	  free(argv[i]);
-	free(argv);
-      } else if (!strcmp("cat", cmd)) {
-	char *argv[3];
-	argv[0] = strdup("/bin/cat");
-	argv[1] = tokens[1]; // file to display.
-	argv[2] = NULL;
-	execvp(argv[0], argv);
-      } else if (!strcmp("pwd", cmd)) {
-	char *argv[2];
-	argv[0] = strdup("/bin/pwd");
-	argv[1] = NULL;
-	execvp(argv[0], argv);
-      } else if (!strcmp("ls", cmd)) {
-	char *argv[2];
-	argv[0] = strdup("/bin/ls");
-	argv[1] = NULL;
-	execvp(argv[0], argv);
-      } else if (!strcmp("wc", cmd)) {
-	int n;
-	char **argv = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
-	argv[0] = strdup("wc");
-	for (n = 1; tokens[n] != NULL; n++)
-	  argv[n] = strdup(tokens[n]); // files to word count.
-	argv[n] = NULL;
-	execvp(argv[0], argv);
-	for (int i = 0; argv[i] != NULL; i++)
-	  free(argv[i]);
-	free(argv);
-      } else if (!strcmp("sleep", cmd)) {
-	char *argv[3];
-	argv[0] = strdup("/bin/sleep");
-	argv[1] = tokens[1]; // sleep time seconds.
-	argv[2] = NULL;
-	execvp(argv[0], argv);
-      } 
-    } else {
-      // parent process.
-      wait(NULL); // wait until child process finishes.
-    }
-  }
-}
-
+ 
 void executeCommand(char **tokens) {
   int i;
   char *command = tokens[0];
@@ -151,57 +82,103 @@ void executeCommand(char **tokens) {
       argv[0] = strdup("/bin/ls"); 
     } else if (!strcmp(command, "sort")) {
       argv[0] = strdup("sort");
+    } else if (!strcmp(command, "echo")) {
+      argv[0] = strdup("/bin/echo");
+    } else if (!strcmp(command, "cat")) {
+      argv[0] = strdup("/bin/cat");
+    } else if (!strcmp(command, "pwd")) {
+      argv[0] = strdup("/bin/pwd");
+    } else if (!strcmp(command, "wc")) {
+      argv[0] = strdup("wc");
+    } else if (!strcmp(command, "sleep")) {
+      argv[0] = strdup("/bin/sleep");
+    } else {
+      char error_message[30] = "An error has occurred\n";
+      write(STDERR_FILENO, error_message, strlen(error_message));
+      exit(1);
     }
-    for (i = 1; tokens[i] != NULL; i++)
+    char *file;
+    int redirect_fd;
+    for (i = 1; tokens[i] != NULL; i++) {
+      if (!strcmp(tokens[i], ">")) {
+	printf("redirect found\n");
+	// redirect output and error.
+	file = tokens[i+1];
+	creat(file, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH); // flags give read/write permissions
+	redirect_fd = open(file, O_WRONLY | O_TRUNC);
+	dup2(redirect_fd, STDOUT_FILENO); // redirect output
+	dup2(redirect_fd, STDERR_FILENO); // redirect error
+	close(redirect_fd);
+	break;
+      }
       argv[i] = tokens[i];
+    }
     argv[i] = NULL;
     execvp(argv[0], argv);
   }
 }
 
+int countCommands(char ***commands) {
+  int count = 0;
+  for (int i = 0; commands[i] != NULL; i++)
+    count += 1;
+  return count;
+}
+
 void executeCommands(char ***commands, int inputfd) {
+  // only supports one pipe.
   if (commands[1] == NULL) {
-    // we are at the last command
-    int id = fork();
-    if (id < 0) {
-      printf("fork failed\n");
-      exit(1);
-    } else if (id == 0) {
-      // child process
-      if (inputfd != -1) {
-	// accept input from pipe called by last process
-	dup2(inputfd, STDIN_FILENO);
-	close(inputfd);
-      }
+    // this is the only command in array, no need to pipe.
+    if (!strcmp(commands[0][0], "exit") || !strcmp(commands[0][0], "cd") || !strcmp(commands[0][0], "cd..")) {
+      // these are the commands which do not require a fork.
       executeCommand(commands[0]);
     } else {
-      wait(NULL);
+      int id = fork();
+      if (id < 0) {
+	// fork failed.
+	exit(1);
+      } else if (id == 0) {
+	executeCommand(commands[0]);
+      } else {
+	// parent process.
+	wait(NULL);
+      }
     }
   } else {
-    // there is at least 1 more command after this
+    // there is more than one command in array.
     int fd[2];
     if (pipe(fd) == -1) {
-      printf("pipe failed\n");
+      // pipe failed.
       exit(1);
     }
-    int id = fork();
-    if (id < 0) {
-      printf("fork failed\n");
+    int id1 = fork();
+    if (id1 < 0) {
+      // fork failed.
       exit(1);
-    } else if (id == 0) {
-      // child process
-      if (inputfd != -1) {
-	// accept input from pipe called by last process
-	dup2(inputfd, STDIN_FILENO);
-	close(inputfd);
-      }
-      dup2(fd[1], STDOUT_FILENO); // redirect output to pipe
+    } else if (id1 == 0) {
+      // child process.
+      dup2(fd[1], STDOUT_FILENO); // redirect output of first command.
+      close(fd[0]);
       close(fd[1]);
       executeCommand(commands[0]);
-      executeCommands(commands++, fd[0]);
-    } else {
-      wait(NULL);
     }
+    
+    int id2 = fork();
+    if (id2 < 0) {
+      // fork failed.
+      exit(1);
+    } else if (id2 == 0) {
+      // child process.
+      dup2(fd[0], STDIN_FILENO);
+      close(fd[0]);
+      close(fd[1]);
+      executeCommand(commands[1]);
+    }
+
+    close(fd[0]);
+    close(fd[1]);
+
+    wait(NULL);
   }
 }
 
@@ -244,42 +221,7 @@ int main(int argc, char* argv[]) {
       printf("\n");
     }
     */
-
-    /*
-    for (int i = 0; commands[i] != NULL; i++) {
-      if (isValidCMD(commands[i][0])) {
-	char *file;
-	char update = 0;
-	int redirect_fd;
-	for (int j = 0; commands[i][j] != NULL; j++) {
-	  if (!strcmp(commands[i][j], ">")) {
-	    // redirect std error and std output to file
-	    update = 1;
-	    file = commands[i][j + 1]; // file should be the next token after '>'
-	  }
-	  if (update) {
-	    // if update is true, we know we have the file and remove any flags inputted by user
-	    // flags for this command are unsupported
-	    commands[i][j] = NULL;
-	  }
-	}
-
-	if (update) {
-	  // if update is true, we have found a redirection flag
-	  creat(file, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH); // flags give read/write permissions
-	  dup2(redirect_fd, STDOUT_FILENO); // redirect output
-	  dup2(redirect_fd, STDERR_FILENO); // redirect error
-	  close(redirect_fd);
-	}
-
-	executeCMD(commands[i]);
-      } else {
-	char error_message[30] = "An error has occurred\n";
-	write(STDERR_FILENO, error_message, strlen(error_message));
-      }
-    }
-    */
-
+   
     executeCommands(commands, -1);
 	
     // Freeing the allocated memory
